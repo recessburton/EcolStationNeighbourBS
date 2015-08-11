@@ -52,10 +52,12 @@ implementation {
 	uint8_t helloMsgCount = 0;
 	uint8_t neighbourNumIndex = 0;//邻居数目，>从0开始!<<<<<<
 	int tempIndex;
+	uint16_t temper = 0;
+	uint16_t humid = 0;
+	uint16_t light = 0;
 	uint16_t battery = 0;
 
 	event void AMControl.startDone(error_t err) {
-		call TelosbBuiltinSensors.readBattery();
 		if(err == SUCCESS) {
 			call Timer0.startPeriodic(TIMER_PERIOD_MILLI);
 		}
@@ -96,11 +98,9 @@ implementation {
 			call Timer1.stop();						//暂时停止邻居关系消息的发送
 			helloMsgCount = 0;
 			//内存中的邻居关系数据清空
-			busy = TRUE;									//暂时设置无线为不可用，不接收过时的邻居关系回包
 			neighbourNumIndex = 0;
 			memset(neighbourSet,10*MAX_NEIGHBOUR_NUM,0);
 			memset(nx_neighbourSet, MAX_NEIGHBOUR_NUM,0);
-			busy = FALSE;
 		}
 	}
 
@@ -183,7 +183,7 @@ implementation {
 				if(helloMsgCount < 20)
 					totalhello = helloMsgCount;
 				linkq = (float) (neighbourSet[i].recvCount / ((totalhello -10)* 1.0));
-				neighbourSet[i].linkquality = (linkq>100) ? 100 : linkq;
+				neighbourSet[i].linkquality = (linkq>1) ? 1 : linkq;
 			}else{
 				continue;
 			}
@@ -205,6 +205,10 @@ implementation {
 		convertNX();	
 		ctpmsg -> neighbourNum = neighbourNumIndex;
 		ctpmsg -> nodeid = (nx_uint8_t)TOS_NODE_ID;
+		call TelosbBuiltinSensors.readAllSensors();
+		ctpmsg -> temp   = temper;
+		ctpmsg -> humid = humid;
+		ctpmsg -> light     = light;
 		ctpmsg -> power = battery;
 		memcpy(ctpmsg -> neighbourSet, nx_neighbourSet, sizeof(nx_neighbourSet));
 		call Send.send(&packet, sizeof(NeiCTPMsg));
@@ -218,7 +222,7 @@ implementation {
 			if(btrpkt->dstid == 0xFF){	//接到其它节点发的hello包，回ack包
 				ackMsgSend(btrpkt->sourceid);
 			}
-			else if ( (btrpkt->dstid - TOS_NODE_ID) == 0 && busy == FALSE) {	//接到的是自己的回包，计算链路质量，判断邻居资格
+			else if ( (btrpkt->dstid - TOS_NODE_ID) == 0) {	//接到的是自己的回包，计算链路质量，判断邻居资格
 				addSet(btrpkt->sourceid);
 				estLinkQuality(btrpkt->sourceid);
 			}else{	//其它包，丢弃
@@ -271,12 +275,15 @@ implementation {
 		sendEvent(ctpmsg);
 	}
 
-	event void TelosbBuiltinSensors.readAllDone(error_t errT, uint16_t temp, error_t errH, uint16_t humi, error_t errL, uint16_t ligh, error_t errB, uint16_t batt){
-		// TODO Auto-generated method stub
+	event void TelosbBuiltinSensors.readAllDone(error_t errT, uint16_t tem, error_t errH, uint16_t humi, error_t errL, uint16_t ligh, error_t errB, uint16_t batt){
+		temper = tem;
+		humid = humi;
+		light = ligh;
+		battery = batt;
 	}
 
 	event void TelosbBuiltinSensors.readBatteryDone(error_t err, uint16_t data){
-		battery = data;
+		// TODO Auto-generated method stub
 	}
 
 	event void TelosbBuiltinSensors.readTemperatureDone(error_t err, uint16_t data){
